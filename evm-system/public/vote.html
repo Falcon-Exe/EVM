@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voting Booth - College EVM Hardware</title>
+    <!-- MODERN STYLE: <link rel="stylesheet" href="styles.css"> -->
+    <link rel="stylesheet" href="evm-hardware.css">
+</head>
+
+<body>
+    <!-- Welcome View -->
+    <div id="welcome-view" class="evm-frame"
+        style="text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 400px;">
+        <div style="margin-bottom: 30px;">
+            <div
+                style="background: #facc15; color: #1e293b; padding: 6px 20px; border-radius: 4px; font-weight: 900; font-size: 0.9rem; display: inline-block; font-family:'Orbitron'; margin-bottom: 15px; border: 2px solid #1e293b; box-shadow: 0 4px 0 #1e293b;">
+                MAJLIS UMARIYYA STUDENTS FEDERATION</div>
+            <h1 style="font-family:'Orbitron'; color: #1e3a8a; margin: 0; font-size: 2.22rem; letter-spacing: 2px;">
+                BALLOTTING UNIT</h1>
+        </div>
+        <div class="evm-inner-bezel"
+            style="background: white; padding: 40px; margin-bottom: 20px; text-align: center; width: 100%; max-width: 500px;">
+            <p style="font-weight: bold; color: #475569;">PLEASE ENTER IDENTITY TO UNLOCK</p>
+            <div style="margin: 20px 0;">
+                <input type="text" id="voter-id" placeholder="CIC / REG NO"
+                    style="width: 100%; max-width: 400px; padding: 20px; font-family:'Orbitron'; text-align:center; font-size: 2rem; border: 4px solid #94a3b8; border-radius: 8px;">
+            </div>
+            <button class="evm-blue-btn" onclick="startVoting()"
+                style="width: 250px; height: 70px; color: white; font-size: 1.5rem;">START</button>
+        </div>
+        <p id="login-error" style="color: #ef4444; font-weight: bold; text-align: center;" class="hidden"></p>
+    </div>
+
+    <!-- Wizard View -->
+    <div id="wizard-view" class="evm-frame hidden">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+            <div>
+                <h2 id="position-title" style="font-family:'Orbitron'; color: #1e3a8a; letter-spacing: 2px; margin:0;">
+                    BALLOT POSITION</h2>
+                <div
+                    style="background: #111; color: #4ade80; padding: 5px 15px; border-radius: 4px; font-family:'Orbitron'; display: inline-block; font-size: 1rem; margin-top: 10px;">
+                    POST <span id="current-step-num">1</span> / <span id="total-steps-num">5</span>
+                </div>
+            </div>
+            <div
+                style="width: 15px; height: 15px; background: #22c55e; border-radius: 50%; display: inline-block; border: 1px solid #166534; box-shadow: 0 0 5px #22c55e;">
+            </div>
+        </div>
+        <div id="signal-bezel"
+            style="background: #e2e8f0; border: 2px solid #94a3b8; padding: 10px; border-radius: 4px; text-align: right; margin-left:10px;">
+            <div style="font-size: 0.7rem; color: #64748b; font-weight: bold;">LINK</div>
+            <div id="signal-led"
+                style="width: 15px; height: 15px; background: #22c55e; border-radius: 50%; display: inline-block; border: 1px solid #166534; box-shadow: 0 0 5px #22c55e;">
+            </div>
+        </div>
+        <div id="candidates-container" class="evm-inner-bezel"
+            style="padding: 0; overflow: hidden; border: 3px solid #64748b;">
+            <!-- Ballot rows will be injected here -->
+        </div>
+    </div>
+
+    <!-- Review View -->
+    <div id="review-view" class="evm-frame hidden">
+        <h2 style="font-family:'Orbitron'; text-align: center; color: #1e3a8a;">FINAL REVIEW</h2>
+        <div id="review-list" class="evm-inner-bezel" style="background: white;">
+            <!-- Review items -->
+        </div>
+        <div style="margin-top: 30px; text-align: center;">
+            <button onclick="submitFinalVote()" class="evm-blue-btn"
+                style="width: 400px; height: 80px; background: #059669; border-color: #064e3b; color: white; font-size: 1.8rem;">CAST
+                FINAL VOTE</button>
+            <p style="margin-top: 15px; font-weight: bold; color: #475569;">PRESS GREEN BUTTON TO CONFIRM</p>
+        </div>
+    </div>
+
+    <!-- Success Overlay -->
+    <div id="success-overlay" class="evm-overlay" style="display: none;">
+        <div style="font-size: 12rem; color: #4ade80; line-height: 1;">✓</div>
+        <div class="success-text">VOTE RECORDED</div>
+        <div style="margin-top: 20px; color: #94a3b8; font-family: 'Orbitron'; font-size: 1.2rem; letter-spacing: 5px;">
+            BUSY LAMP OFF</div>
+        <div style="margin-top: 10px; color: #4ade80; font-family: 'Orbitron'; font-size: 0.9rem;">BALLOT UNIT SECURED
+        </div>
+    </div>
+
+    <!-- Network Error Overlay -->
+    <div id="network-overlay" class="evm-overlay hidden" style="background: rgba(15, 23, 42, 0.98); z-index: 10000;">
+        <div
+            style="width: 80px; height: 80px; border: 8px solid #334155; border-top: 8px solid #ef4444; border-radius: 50%; animation: spin 2s linear infinite; margin-bottom: 30px;">
+        </div>
+        <div
+            style="font-family:'Orbitron'; font-size: 2rem; color: #ef4444; letter-spacing: 5px; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);">
+            SIGNAL LOST</div>
+        <div style="margin-top: 20px; color: #94a3b8; font-family: 'Orbitron'; font-size: 1rem;">RECONNECTING TO CONTROL
+            UNIT...</div>
+        <div
+            style="margin-top: 40px; border: 2px solid #ef4444; padding: 15px 40px; border-radius: 4px; color: #ef4444; font-weight: bold; font-family:'Orbitron';">
+            PLEASE DO NOT REFRESH OR REBOOT</div>
+    </div>
+
+
+    <style>
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+
+    <script>
+        const POSITION_ORDER = ['Chairman', 'General Secretary', 'Treasurer', 'CUC', 'Fine Arts'];
+
+        function playBeep(frequency = 880, duration = 500) {
+            try {
+                const context = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = context.createOscillator();
+                const gainNode = context.createGain();
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+                oscillator.connect(gainNode);
+                gainNode.connect(context.destination);
+                gainNode.gain.setValueAtTime(0.1, context.currentTime);
+                oscillator.start();
+                oscillator.stop(context.currentTime + (duration / 1000));
+            } catch (e) { }
+        }
+
+        let allData = {};
+        let positions = [];
+        let currentStep = 0;
+        let selections = {};
+
+        async function startVoting() {
+            const id = document.getElementById('voter-id').value.trim();
+            if (!id) return;
+
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId: id })
+            });
+
+            if (res.ok) {
+                await initWizard();
+                document.querySelectorAll('.evm-frame').forEach(f => f.classList.add('hidden'));
+                document.getElementById('wizard-view').classList.remove('hidden');
+            } else {
+                const data = await res.json();
+                const err = document.getElementById('login-error');
+                err.textContent = data.error;
+                err.classList.remove('hidden');
+            }
+        }
+
+        async function initWizard() {
+            const res = await fetch('/api/candidates');
+            const data = await res.json();
+            allData = data;
+
+            positions = Object.keys(data).sort((a, b) => {
+                let indexA = POSITION_ORDER.indexOf(a);
+                let indexB = POSITION_ORDER.indexOf(b);
+                if (indexA === -1) indexA = 99;
+                if (indexB === -1) indexB = 99;
+                return indexA - indexB;
+            });
+
+            renderStep();
+        }
+
+        function renderStep() {
+            const container = document.getElementById('candidates-container');
+            container.innerHTML = '';
+
+            const step = positions[currentStep];
+            document.getElementById('position-title').textContent = step.toUpperCase();
+            document.getElementById('current-step-num').textContent = currentStep + 1;
+            document.getElementById('total-steps-num').textContent = positions.length;
+
+            allData[step].forEach((c, index) => {
+                const row = document.createElement('div');
+                row.className = 'ballot-row';
+
+                row.onclick = () => selectCandidate(step, c.id, row);
+                row.innerHTML = `
+                    <div class="serial">${index + 1}</div>
+                    <div class="symbol" style="font-size: 2rem; width: 60px; text-align: center;">${c.symbol || '👤'}</div>
+                    <div class="name">${c.name}</div>
+                    <div class="evm-led"></div>
+                    <div class="evm-blue-btn"></div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function selectCandidate(step, id, element) {
+            if (element.classList.contains('selected')) return; // Avoid double clicks
+
+            selections[step] = id;
+            localStorage.setItem('evm_selections', JSON.stringify(selections));
+            localStorage.setItem('evm_step', currentStep);
+
+            element.classList.add('selected');
+            playBeep(880, 200); // Beep confirmation
+
+            setTimeout(() => {
+                if (currentStep < positions.length - 1) {
+                    currentStep++;
+                    localStorage.setItem('evm_step', currentStep);
+                    renderStep();
+                } else {
+                    submitFinalVote();
+                }
+            }, 500); // 0.5s pause to see the red LED before moving/submitting
+        }
+
+        function nextStep() {
+            if (currentStep < positions.length - 1) {
+                currentStep++;
+                renderStep();
+            } else {
+                showReview();
+            }
+        }
+
+        function showReview() {
+            document.getElementById('wizard-view').classList.add('hidden');
+            document.getElementById('review-view').classList.remove('hidden');
+
+            const list = document.getElementById('review-list');
+            list.innerHTML = '';
+            positions.forEach(pos => {
+                const candId = selections[pos];
+                const cand = allData[pos].find(c => c.id === candId);
+                const item = document.createElement('div');
+                item.style.padding = '15px 25px';
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.borderBottom = '1px solid #e2e8f0';
+                item.style.alignItems = 'center';
+                item.innerHTML = `
+                    <div style="text-align: left;">
+                        <div style="font-family:'Orbitron'; font-size:0.65rem; color: #94a3b8; letter-spacing: 1px;">${pos.toUpperCase()}</div>
+                        <div style="font-weight: 800; font-size: 1.1rem; color: #1e293b; display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.4rem;">${cand ? cand.symbol : '👤'}</span>
+                            <span>${cand ? cand.name : '---'}</span>
+                        </div>
+                    </div>
+                    <div style="color: #4ade80; font-family:'Orbitron'; font-size: 0.7rem; font-weight: bold; text-align: right;">SELECTION<br>REGISTERED</div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        let isSubmitting = false;
+        async function submitFinalVote(retryCount = 0) {
+            if (isSubmitting && retryCount === 0) return;
+            isSubmitting = true;
+
+            // Visual feedback on button
+            const btn = document.querySelector('#review-view .evm-blue-btn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "REGISTERING...";
+                btn.style.opacity = "0.7";
+            }
+
+            const voteIds = Object.values(selections);
+            try {
+                const response = await fetch('/api/submit-vote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ votes: voteIds })
+                });
+
+                if (response.ok) {
+                    localStorage.removeItem('evm_selections'); // Clear on success
+                    localStorage.removeItem('evm_step');
+                    playBeep(880, 1000); // LONG BEEP
+
+                    // FORCE HIDE ALL VIEWS
+                    document.querySelectorAll('.evm-frame').forEach(f => f.classList.add('hidden'));
+
+                    document.getElementById('success-overlay').style.display = 'flex';
+                    setTimeout(() => { window.location.href = 'index.html'; }, 4000);
+                } else {
+                    const data = await response.json();
+                    alert("Error: " + data.error);
+                }
+            } catch (e) {
+                console.error("Submission failed, retrying...", e);
+                if (retryCount < 5) {
+                    showNetworkError(true);
+                    setTimeout(() => submitFinalVote(retryCount + 1), 2000);
+                } else {
+                    alert("CRITICAL ERROR: Failed to reach server. Please inform the Presiding Officer.");
+                }
+            }
+        }
+
+        function showNetworkError(visible) {
+            const overlay = document.getElementById('network-overlay');
+            const led = document.getElementById('signal-led');
+            if (visible) {
+                overlay.classList.remove('hidden');
+                led.style.background = '#ef4444';
+                led.style.boxShadow = '0 0 10px #ef4444';
+            } else {
+                overlay.classList.add('hidden');
+                led.style.background = '#22c55e';
+                led.style.boxShadow = '0 0 5px #22c55e';
+            }
+        }
+
+        async function monitorNetwork() {
+            try {
+                const res = await fetch('/api/candidates', { method: 'HEAD' });
+                if (res.ok) showNetworkError(false);
+                else showNetworkError(true);
+            } catch (e) {
+                showNetworkError(true);
+            }
+            setTimeout(monitorNetwork, 5000);
+        }
+
+        async function checkSession() {
+            const res = await fetch('/api/session-status');
+            const data = await res.json();
+            if (data.loggedIn) {
+                // Restore state
+                const savedSelections = localStorage.getItem('evm_selections');
+                const savedStep = localStorage.getItem('evm_step');
+                if (savedSelections) selections = JSON.parse(savedSelections);
+                if (savedStep) currentStep = parseInt(savedStep);
+
+                await initWizard();
+                document.querySelectorAll('.evm-frame').forEach(f => f.classList.add('hidden'));
+                document.getElementById('wizard-view').classList.remove('hidden');
+                monitorNetwork();
+            }
+        }
+
+        window.history.pushState(null, null, window.location.href);
+        window.onpopstate = () => window.history.go(1);
+
+        checkSession();
+    </script>
+</body>
+
+</html>

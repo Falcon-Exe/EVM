@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>EVM DEBUG CONSOLE</title>
+    <link rel="stylesheet" href="evm-hardware.css">
+    <style>
+        body {
+            background: #0f172a;
+            color: #94a3b8;
+            display: block;
+            padding: 40px;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .debug-card {
+            background: #1e293b;
+            border: 2px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            background: #ef4444;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+        }
+
+        .green-btn {
+            background: #22c55e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-family: 'Orbitron';
+        }
+
+        .voter-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 10px;
+            max-height: 500px;
+            overflow-y: auto;
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .voter-row {
+            background: #111;
+            border: 1px solid #222;
+            padding: 10px;
+            font-size: 0.8rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .edit-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+
+        .edit-box {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 8px;
+            border: 2px solid #3b82f6;
+            width: 400px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: white;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;">
+        <div>
+            <span class="badge">SECURE DEBUG LAYER</span>
+            <h1 style="color: white; margin: 10px 0;">MASTER CONTROL UNIT (DEBUG)</h1>
+        </div>
+        <div style="text-align: right;">
+            <div style="font-size: 0.7rem;">HARDWARE STATUS</div>
+            <div style="color: #22c55e;">EMULATOR ACTIVE</div>
+        </div>
+    </div>
+
+    <div class="debug-card">
+        <h3>⚡ BULK ACTIONS</h3>
+        <button class="green-btn" onclick="approveAll()">APPROVE ALL 159 VOTERS</button>
+        <button class="green-btn" style="background: #3b82f6;" onclick="location.reload()">REFRESH DATAFEED</button>
+        <p style="font-size: 0.7rem; margin-top: 10px;">Use these to skip manual presiding officer approval during
+            simulation.</p>
+    </div>
+
+    <div class="debug-card">
+        <h3>🗳️ CANDIDATE DATABASE</h3>
+        <div id="candidate-list" class="voter-list" style="max-height: 200px; margin-bottom: 20px;">Loading
+            candidates...</div>
+    </div>
+
+    <div class="debug-card">
+        <h3>🏃 VOTER DATABASE & SESSION JUMP</h3>
+        <p style="font-size: 0.8rem; margin-bottom: 20px;">Click any voter to instantly login as them or edit their
+            profile.</p>
+        <div id="voter-list" class="voter-list">Loading voter database...</div>
+    </div>
+
+    <div id="edit-modal" class="edit-modal" onclick="if(event.target === this) closeEdit()">
+        <div class="edit-box" onclick="event.stopPropagation()">
+            <h2 id="edit-title">EDIT RECORD</h2>
+            <div id="edit-fields"></div>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button class="green-btn" style="flex: 1;" onclick="saveEdit()">SAVE CHANGES</button>
+                <button class="green-btn" style="flex: 1; background: #475569;" onclick="closeEdit()">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentEditType = null;
+        let currentEditId = null;
+
+        async function loadCandidates() {
+            const res = await fetch('/api/admin/results');
+            const candidates = await res.json();
+            const list = document.getElementById('candidate-list');
+            list.innerHTML = '';
+            candidates.forEach(c => {
+                const row = document.createElement('div');
+                row.className = 'voter-row';
+                row.innerHTML = `
+                    <div>
+                        <div style="color: white; font-weight: bold;">${c.symbol || '👤'} ${c.name}</div>
+                        <div style="font-size: 0.6rem; opacity: 0.5;">${c.position}</div>
+                    </div>
+                    <button onclick='openEdit("candidate", ${JSON.stringify(c)})' style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">EDIT</button>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        async function loadVoters() {
+            const vRes = await fetch('/api/admin/debug/all-voters');
+            const voters = await vRes.json();
+
+            const list = document.getElementById('voter-list');
+            list.innerHTML = '';
+
+            voters.forEach(v => {
+                const row = document.createElement('div');
+                row.className = 'voter-row';
+                const statusColor = v.has_voted ? '#ef4444' : (v.approved ? '#22c55e' : '#fbbf24');
+                row.innerHTML = `
+                    <div>
+                        <div style="color: white; font-weight: bold;">${v.name}</div>
+                        <div style="font-size: 0.6rem; opacity: 0.5;">CIC: ${v.cic_no} | REG: ${v.reg_no}</div>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor}"></span>
+                        <button onclick='openEdit("voter", ${JSON.stringify(v)})' style="background: #3b82f6; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer;">EDIT</button>
+                        <button onclick="deleteVoter(${v.id}, '${v.name}')" style="background: #ef4444; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer;">DEL</button>
+                        <button onclick="cheatLogin('${v.cic_no}')" style="background: #22c55e; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer; font-weight: bold;">JUMP</button>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        }
+
+        function openEdit(type, data) {
+            currentEditType = type;
+            currentEditId = data.id;
+            const modal = document.getElementById('edit-modal');
+            const fields = document.getElementById('edit-fields');
+            const title = document.getElementById('edit-title');
+            modal.style.display = 'flex';
+
+            if (type === 'voter') {
+                title.textContent = "EDIT VOTER";
+                fields.innerHTML = `
+                    <label>NAME</label><input id="edit_name" value="${data.name}">
+                    <label>CIC NO</label><input id="edit_cic" value="${data.cic_no}">
+                    <label>REG NO</label><input id="edit_reg" value="${data.reg_no}">
+                `;
+            } else {
+                title.textContent = "EDIT CANDIDATE";
+                fields.innerHTML = `
+                    <label>NAME</label><input id="edit_name" value="${data.name}">
+                    <label>SYMBOL</label><input id="edit_symbol" value="${data.symbol || ''}">
+                `;
+            }
+        }
+
+        function closeEdit() {
+            document.getElementById('edit-modal').style.display = 'none';
+        }
+
+        async function saveEdit() {
+            const endpoint = currentEditType === 'voter' ? '/api/admin/debug/update-voter' : '/api/admin/debug/update-candidate';
+            const body = currentEditType === 'voter' ? {
+                id: currentEditId,
+                name: document.getElementById('edit_name').value,
+                cic_no: document.getElementById('edit_cic').value,
+                reg_no: document.getElementById('edit_reg').value
+            } : {
+                id: currentEditId,
+                name: document.getElementById('edit_name').value,
+                symbol: document.getElementById('edit_symbol').value
+            };
+
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (res.ok) {
+                closeEdit();
+                loadVoters();
+                loadCandidates();
+            }
+        }
+
+        async function deleteVoter(id, name) {
+            if (!confirm(`PERMANENT ACTION: Delete student ${name}? This cannot be undone.`)) return;
+            const res = await fetch('/api/admin/debug/delete-voter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            if (res.ok) {
+                loadVoters();
+            }
+        }
+
+        async function approveAll() {
+            if (!confirm("Approve all 159 voters for simulation?")) return;
+            const res = await fetch('/api/admin/debug/approve-all', { method: 'POST' });
+            if (res.ok) {
+                alert("All voters approved!");
+                loadVoters();
+            }
+        }
+
+        function cheatLogin(id) {
+            // We use a trick: the vote page takes a voter-id. We'll simply redirect with a hidden intent.
+            // Actually, we can just hit the login API directly from here and then redirect
+            fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ studentId: id })
+            }).then(res => {
+                if (res.ok) window.open('vote.html', '_blank');
+            });
+        }
+
+        loadVoters();
+        loadCandidates();
+    </script>
+</body>
+
+</html>

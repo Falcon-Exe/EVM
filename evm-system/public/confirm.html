@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirm Vote - College EVM</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Confirm Your Vote</h1>
+        <p>Please review your selections before final submission.</p>
+
+        <div id="summary-box" class="position-card" style="border: 2px solid var(--primary);">
+            <!-- Summary items will be loaded here -->
+        </div>
+
+        <button onclick="submitVote()" style="background-color: var(--success);">Confirm & Submit Vote</button>
+        <button onclick="window.history.back()" style="margin-top: 10px; background-color: #94a3b8;">Go Back</button>
+    </div>
+
+    <script>
+        const summary = JSON.parse(sessionStorage.getItem('voteSummary'));
+        const summaryBox = document.getElementById('summary-box');
+
+        for (const pos in summary) {
+            summaryBox.innerHTML += `
+                <div style="margin-bottom: 10px; display: flex; justify-content: space-between;">
+                    <strong>${pos}:</strong>
+                    <span>${summary[pos]}</span>
+                </div>
+            `;
+        }
+
+        async function submitVote() {
+            const votes = JSON.parse(sessionStorage.getItem('selectedVotes'));
+
+            try {
+                const response = await fetch('/api/submit-vote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ votes })
+                });
+
+                if (response.ok) {
+                    alert("Your vote has been successfully recorded!");
+                    sessionStorage.clear();
+                    window.location.href = 'index.html';
+                } else {
+                    const data = await response.json();
+                    alert("Error: " + data.error);
+                }
+            } catch (err) {
+                alert("Submission failed. Check connection.");
+            }
+        }
+    </script>
+</body>
+
+</html>
