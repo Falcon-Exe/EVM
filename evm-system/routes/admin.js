@@ -69,7 +69,6 @@ module.exports = (db, DEBUG = false) => {
             res.json(rows);
         });
     });
-
     router.post('/approve-voter', adminAuth, (req, res) => {
         const { id } = req.body;
         db.get("SELECT name FROM students WHERE id = ?", [id], (err, student) => {
@@ -78,6 +77,16 @@ module.exports = (db, DEBUG = false) => {
                 db.run("INSERT INTO audit_logs (event, details) VALUES (?, ?)", ['VOTER_APPROVED', `Student: ${student ? student.name : 'Unknown'} (ID: ${id})`]);
                 res.json({ success: true });
             });
+        });
+    });
+
+    router.post('/update-pin', adminAuth, (req, res) => {
+        const { id, pin } = req.body;
+        db.run("UPDATE students SET secure_pin = ? WHERE id = ?", [pin, id], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            db.run("INSERT INTO audit_logs (event, details) VALUES (?, ?)", 
+                ['VOTER_PIN_UPDATED', `ID: ${id}, PIN: ${pin ? 'SET' : 'CLEARED'}`]);
+            res.json({ success: true });
         });
     });
 
@@ -174,12 +183,32 @@ module.exports = (db, DEBUG = false) => {
         });
     });
 
+    router.get('/debug/voted-students', (req, res) => {
+        if (!DEBUG) return res.status(403).json({ error: 'Debug mode disabled' });
+        db.all(`
+            SELECT s.id, s.name, s.cic_no, s.reg_no,
+                GROUP_CONCAT(v.candidate_name || ' (' || v.position || ')', '|||') as voted_for
+            FROM students s
+            LEFT JOIN votes v ON s.id = v.student_id
+            WHERE s.has_voted = 1
+            GROUP BY s.id
+            ORDER BY s.name ASC
+        `, (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows);
+        });
+    });
+
     router.post('/debug/update-voter', (req, res) => {
         if (!DEBUG) return res.status(403).json({ error: 'Debug mode disabled' });
-        const { id, name, cic_no, reg_no } = req.body;
-        db.run("UPDATE students SET name = ?, cic_no = ?, reg_no = ? WHERE id = ?",
-            [name, cic_no, reg_no, id], (err) => {
-                if (err) return res.status(500).json({ error: err.message });
+        const { id, name, cic_no, reg_no, approved, secure_pin } = req.body;
+        console.log(`[DEBUG] Updating voter ${id}: Approved=${approved}, PIN=${secure_pin}`);
+        db.run("UPDATE students SET name = ?, cic_no = ?, reg_no = ?, approved = ?, secure_pin = ? WHERE id = ?",
+            [name, cic_no, reg_no, approved, secure_pin, id], (err) => {
+                if (err) {
+                    console.error(`[DEBUG] Update failed: ${err.message}`);
+                    return res.status(500).json({ error: err.message });
+                }
                 res.json({ success: true });
             });
     });
@@ -203,6 +232,36 @@ module.exports = (db, DEBUG = false) => {
             db.run("INSERT INTO audit_logs (event, details) VALUES (?, ?)", ['DEBUG_COMMAND', `Student ID ${id} deleted permanently`]);
         });
         res.json({ success: true });
+    });
+
+    router.post('/debug/revoke-vote', (req, res) => {
+        if (!DEBUG) return res.status(403).json({ error: 'Debug mode disabled' });
+        const { id } = req.body;
+        db.get("SELECT name FROM students WHERE id = ?", [id], (err, student) => {
+            if (err || !student) return res.status(404).json({ error: 'Student not found' });
+            // Get all votes cast by this student
+            db.all("SELECT candidate_name FROM votes WHERE student_id = ?", [id], (err, voteRows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                db.serialize(() => {
+                    // Decrement vote count for each voted candidate
+                    voteRows.forEach(v => {
+                        db.run("UPDATE candidates SET votes = MAX(0, votes - 1) WHERE name = ?", [v.candidate_name]);
+                    });
+                    // Delete the vote records
+                    db.run("DELETE FROM votes WHERE student_id = ?", [id]);
+                    // Reset student voting status
+                    db.run("UPDATE students SET has_voted = 0, approved = 0 WHERE id = ?", [id]);
+                    // Log the revocation
+                    db.run("INSERT INTO audit_logs (event, details) VALUES (?, ?)",
+                        ['VOTE_REVOKED', `Student: ${student.name} (ID: ${id}) - ${voteRows.length} vote(s) removed`],
+                        (err) => {
+                            if (err) return res.status(500).json({ error: err.message });
+                            res.json({ success: true, message: `Vote revoked for ${student.name}` });
+                        }
+                    );
+                });
+            });
+        });
     });
 
     return router;

@@ -36,6 +36,40 @@ module.exports = (db, DEBUG = false) => {
         });
     });
 
+    // Remote Login (Method 1)
+    router.post('/remote-login', (req, res) => {
+        let { studentId, pin } = req.body;
+        if (!studentId || !pin) return res.status(400).json({ error: 'ID and PIN are required' });
+
+        studentId = studentId.trim();
+        pin = pin.trim();
+
+        db.get("SELECT * FROM students WHERE cic_no = ? OR reg_no = ?", [studentId, studentId], (err, student) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!student) return res.status(404).json({ error: 'Voter not found.' });
+
+            if (student.has_voted) {
+                return res.status(403).json({ error: 'You have already voted' });
+            }
+
+            if (!student.secure_pin || student.secure_pin !== pin) {
+                return res.status(401).json({ error: 'Invalid PIN or Remote Voting not enabled for this ID.' });
+            }
+
+            // Check election status
+            db.get("SELECT value FROM config WHERE key = 'election_status'", (err, config) => {
+                const status = (config && config.value) || 'stopped';
+                if (status !== 'running' && !DEBUG) {
+                    return res.status(403).json({ error: 'Election is not currently running' });
+                }
+
+                req.session.studentId = student.id;
+                req.session.isRemote = true; // Flag for audit
+                res.json({ success: true, name: student.name });
+            });
+        });
+    });
+
     router.get('/session-status', (req, res) => {
         if (req.session.studentId) {
             db.get("SELECT name FROM students WHERE id = ?", [req.session.studentId], (err, student) => {

@@ -129,6 +129,15 @@
         <div id="voter-list" class="voter-list">Loading voter database...</div>
     </div>
 
+    <div class="debug-card">
+        <h3>📋 VOTED STUDENTS REPORT</h3>
+        <p style="font-size: 0.8rem; margin-bottom: 10px;">All students who have cast their vote and what they voted for.</p>
+        <div id="voted-count" style="font-size: 1.2rem; color: #22c55e; font-weight: bold; margin-bottom: 10px;">Loading...</div>
+        <div id="voted-report" style="background: #000; padding: 10px; border-radius: 4px; max-height: 400px; overflow-y: auto; font-size: 0.78rem;">
+            Loading...
+        </div>
+    </div>
+
     <div id="edit-modal" class="edit-modal" onclick="if(event.target === this) closeEdit()">
         <div class="edit-box" onclick="event.stopPropagation()">
             <h2 id="edit-title">EDIT RECORD</h2>
@@ -143,56 +152,83 @@
     <script>
         let currentEditType = null;
         let currentEditId = null;
+        let voterDataCache = {};
+        let candidateDataCache = {};
 
         async function loadCandidates() {
-            const res = await fetch('/api/admin/results');
-            const candidates = await res.json();
-            const list = document.getElementById('candidate-list');
-            list.innerHTML = '';
-            candidates.forEach(c => {
-                const row = document.createElement('div');
-                row.className = 'voter-row';
-                row.innerHTML = `
-                    <div>
-                        <div style="color: white; font-weight: bold;">${c.symbol || '👤'} ${c.name}</div>
-                        <div style="font-size: 0.6rem; opacity: 0.5;">${c.position}</div>
-                    </div>
-                    <button onclick='openEdit("candidate", ${JSON.stringify(c)})' style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">EDIT</button>
-                `;
-                list.appendChild(row);
-            });
+            try {
+                const res = await fetch('/api/admin/results');
+                const candidates = await res.json();
+                const list = document.getElementById('candidate-list');
+                list.innerHTML = '';
+                
+                if (candidates.error) {
+                    list.innerHTML = `<div style="color: #ef4444; padding: 10px;">ERROR: ${candidates.error}</div>`;
+                    return;
+                }
+
+                candidates.forEach(c => {
+                    candidateDataCache[c.id] = c;
+                    const row = document.createElement('div');
+                    row.className = 'voter-row';
+                    row.innerHTML = `
+                        <div>
+                            <div style="color: white; font-weight: bold;">${c.symbol || '👤'} ${c.name}</div>
+                            <div style="font-size: 0.6rem; opacity: 0.5;">${c.position}</div>
+                        </div>
+                        <button onclick='openEdit("candidate", ${c.id})' style="background: #3b82f6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">EDIT</button>
+                    `;
+                    list.appendChild(row);
+                });
+            } catch (e) {
+                console.error("Failed to load candidates:", e);
+            }
         }
 
         async function loadVoters() {
-            const vRes = await fetch('/api/admin/debug/all-voters');
-            const voters = await vRes.json();
+            try {
+                const vRes = await fetch('/api/admin/debug/all-voters');
+                const voters = await vRes.json();
 
-            const list = document.getElementById('voter-list');
-            list.innerHTML = '';
+                const list = document.getElementById('voter-list');
+                list.innerHTML = '';
 
-            voters.forEach(v => {
-                const row = document.createElement('div');
-                row.className = 'voter-row';
-                const statusColor = v.has_voted ? '#ef4444' : (v.approved ? '#22c55e' : '#fbbf24');
-                row.innerHTML = `
-                    <div>
-                        <div style="color: white; font-weight: bold;">${v.name}</div>
-                        <div style="font-size: 0.6rem; opacity: 0.5;">CIC: ${v.cic_no} | REG: ${v.reg_no}</div>
-                    </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor}"></span>
-                        <button onclick='openEdit("voter", ${JSON.stringify(v)})' style="background: #3b82f6; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer;">EDIT</button>
-                        <button onclick="deleteVoter(${v.id}, '${v.name}')" style="background: #ef4444; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer;">DEL</button>
-                        <button onclick="cheatLogin('${v.cic_no}')" style="background: #22c55e; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer; font-weight: bold;">JUMP</button>
-                    </div>
-                `;
-                list.appendChild(row);
-            });
+                if (voters.error) {
+                    list.innerHTML = `<div style="color: #ef4444; padding: 10px;">ERROR: ${voters.error}. <br> <small>Please log in as Admin first or enable DEBUG mode.</small></div>`;
+                    return;
+                }
+
+                voters.forEach(v => {
+                    voterDataCache[v.id] = v;
+                    const row = document.createElement('div');
+                    row.className = 'voter-row';
+                    const statusColor = v.has_voted ? '#ef4444' : (v.approved ? '#22c55e' : '#fbbf24');
+                    row.innerHTML = `
+                        <div>
+                            <div style="color: white; font-weight: bold;">${v.name}</div>
+                            <div style="font-size: 0.6rem; opacity: 0.5;">CIC: ${v.cic_no} | REG: ${v.reg_no}</div>
+                            ${v.secure_pin ? `<div style="font-size: 0.6rem; color: #3b82f6; font-weight: bold;">PIN: ${v.secure_pin}</div>` : ''}
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor}"></span>
+                            <button onclick='openEdit("voter", ${v.id})' style="background: #3b82f6; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer;">EDIT</button>
+                            <button onclick="deleteVoter(${v.id}, '${v.name.replace(/'/g, "\\'")}')" style="background: #ef4444; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer;">DEL</button>
+                            ${v.has_voted ? `<button onclick="revokeVote(${v.id}, '${v.name.replace(/'/g, "\\'")}')" style="background: #f97316; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer; font-weight: bold;">REVOKE</button>` : ``}
+                            <button onclick="cheatLogin('${v.cic_no}')" style="background: #22c55e; color: white; border: none; padding: 5px; font-size: 0.6rem; cursor: pointer; font-weight: bold;">JUMP</button>
+                        </div>
+                    `;
+                    list.appendChild(row);
+                });
+            } catch (e) {
+                console.error("Failed to load voters:", e);
+            }
         }
 
-        function openEdit(type, data) {
+        function openEdit(type, id) {
             currentEditType = type;
-            currentEditId = data.id;
+            currentEditId = id;
+            const data = type === 'voter' ? voterDataCache[id] : candidateDataCache[id];
+            
             const modal = document.getElementById('edit-modal');
             const fields = document.getElementById('edit-fields');
             const title = document.getElementById('edit-title');
@@ -204,6 +240,10 @@
                     <label>NAME</label><input id="edit_name" value="${data.name}">
                     <label>CIC NO</label><input id="edit_cic" value="${data.cic_no}">
                     <label>REG NO</label><input id="edit_reg" value="${data.reg_no}">
+                    <label>SECURE PIN</label><input id="edit_pin" value="${data.secure_pin || ''}" placeholder="Empty for none">
+                    <label style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                        <input type="checkbox" id="edit_approved" ${data.approved ? 'checked' : ''} style="width: auto; margin: 0;"> APPROVED
+                    </label>
                 `;
             } else {
                 title.textContent = "EDIT CANDIDATE";
@@ -224,7 +264,9 @@
                 id: currentEditId,
                 name: document.getElementById('edit_name').value,
                 cic_no: document.getElementById('edit_cic').value,
-                reg_no: document.getElementById('edit_reg').value
+                reg_no: document.getElementById('edit_reg').value,
+                approved: document.getElementById('edit_approved').checked ? 1 : 0,
+                secure_pin: document.getElementById('edit_pin').value
             } : {
                 id: currentEditId,
                 name: document.getElementById('edit_name').value,
@@ -241,6 +283,9 @@
                 closeEdit();
                 loadVoters();
                 loadCandidates();
+            } else {
+                const err = await res.json();
+                alert("SAVE FAILED: " + err.error);
             }
         }
 
@@ -253,6 +298,22 @@
             });
             if (res.ok) {
                 loadVoters();
+            }
+        }
+
+        async function revokeVote(id, name) {
+            if (!confirm(`Revoke vote for ${name}?\nThis will:\n- Remove their votes from the tally\n- Allow them to vote again`)) return;
+            const res = await fetch('/api/admin/debug/revoke-vote', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`SUCCESS: ${data.message}`);
+                loadVoters();
+            } else {
+                alert('REVOKE FAILED: ' + data.error);
             }
         }
 
@@ -277,8 +338,34 @@
             });
         }
 
+        async function loadVotedStudents() {
+            try {
+                const res = await fetch('/api/admin/debug/voted-students');
+                const data = await res.json();
+                if (data.error) {
+                    document.getElementById('voted-report').innerHTML = '<span style="color:#ef4444">' + data.error + '</span>';
+                    return;
+                }
+                document.getElementById('voted-count').textContent = 'Total Voted: ' + data.length + ' students';
+                const report = document.getElementById('voted-report');
+                report.innerHTML = data.map(function(v, i) {
+                    var choices = v.voted_for ? v.voted_for.split('|||').map(function(x){ return '&#9658; ' + x; }).join('<br>') : 'No vote record';
+                    return '<div style="border-bottom: 1px solid #1e293b; padding: 8px 0; display: flex; gap: 10px;">' +
+                        '<span style="color:#64748b; min-width: 28px;">' + (i+1) + '.</span>' +
+                        '<div>' +
+                            '<div style="color: white; font-weight: bold;">' + v.name + '</div>' +
+                            '<div style="color: #64748b; font-size: 0.65rem;">CIC: ' + v.cic_no + ' | REG: ' + v.reg_no + '</div>' +
+                            '<div style="color: #22c55e; font-size: 0.7rem; margin-top: 4px;">' + choices + '</div>' +
+                        '</div></div>';
+                }).join('');
+            } catch(e) {
+                document.getElementById('voted-report').innerHTML = '<span style="color:#ef4444">Failed to load report</span>';
+            }
+        }
+
         loadVoters();
         loadCandidates();
+        loadVotedStudents();
     </script>
 </body>
 

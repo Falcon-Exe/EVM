@@ -179,6 +179,7 @@ db.serialize(() => {
     cic_no TEXT UNIQUE,
     reg_no TEXT,
     name TEXT NOT NULL,
+    secure_pin TEXT,
     approved BOOLEAN DEFAULT 0,
     has_voted BOOLEAN DEFAULT 0
   )`);
@@ -226,14 +227,14 @@ db.serialize(() => {
     ['Minhaj', 'General Secretary', '🚀'], ['Rasak', 'General Secretary', '📖'],
     ['Faris', 'Treasurer', '🎨'], ['Shahid', 'Treasurer', '📦'],
     ['Sani', 'CUC', '🕶️'], ['Ajsal', 'CUC', '🚴'],
-    ['Nizamudheen', 'Fine Arts', '🎭'], ['Hashim MV', 'Fine Arts', '🎹']
+    ['Nazih', 'Fine Arts', '🎭'], ['Hashim MV', 'Fine Arts', '🎹']
   ];
   const candidateStmt = db.prepare("INSERT INTO candidates (name, position, symbol) VALUES (?, ?, ?)");
   initialCandidates.forEach(c => candidateStmt.run(c));
   candidateStmt.finalize();
 
   db.run("INSERT INTO config (key, value) VALUES ('election_status', 'stopped')");
-  db.run("INSERT INTO config (key, value) VALUES ('admin_password', 'admin123')");
+  db.run("INSERT INTO config (key, value) VALUES ('admin_password', '256583')");
 
   console.log(`Database initialized with ${voters.length} voters.`);
 });

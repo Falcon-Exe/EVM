@@ -132,6 +132,14 @@
                             <div id="v-status" style="margin-top: 10px; font-weight: bold; text-transform: uppercase;">
                                 STATUS</div>
                         </div>
+                        <div id="remote-actions" style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cbd5e1; display: none;">
+                            <div style="font-size: 0.7rem; font-weight: bold; color: #475569; margin-bottom: 5px;">REMOTE VOTING PIN</div>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="text" id="v-pin" placeholder="NO PIN" style="width: 100px; padding: 5px; font-family:'Orbitron'; font-size: 0.8rem; border: 1px solid #94a3b8;">
+                                <button class="admin-btn" onclick="generatePin()" style="padding: 5px 10px; font-size: 0.7rem;">GEN</button>
+                                <button class="admin-btn" onclick="updateVoterPin()" style="padding: 5px 10px; font-size: 0.7rem; background: #3b82f6;">SET</button>
+                            </div>
+                        </div>
                         <button id="approve-btn" onclick="approveSelectedVoter()" class="evm-blue-btn"
                             style="width: 200px; height: 50px; color: white; display: none;">APPROVE</button>
                     </div>
@@ -362,14 +370,18 @@
                     statusText.textContent = "ALREADY VOTED";
                     statusText.style.color = "#dc2626";
                     approveBtn.style.display = 'none';
+                    document.getElementById('remote-actions').style.display = 'none';
                 } else if (voter.approved) {
                     statusText.textContent = "APPROVED (READY)";
                     statusText.style.color = "#16a34a";
                     approveBtn.style.display = 'none';
+                    document.getElementById('remote-actions').style.display = 'none';
                 } else {
                     statusText.textContent = "PENDING";
                     statusText.style.color = "#b45309";
                     approveBtn.style.display = 'block';
+                    document.getElementById('remote-actions').style.display = 'block';
+                    document.getElementById('v-pin').value = voter.secure_pin || '';
                 }
             } else {
                 alert("Voter not found");
@@ -390,6 +402,24 @@
                 document.getElementById('voterSearch').value = '';
                 document.getElementById('voterSearch').focus();
                 loadDashboard();
+            }
+        }
+
+        function generatePin() {
+            const pin = Math.floor(1000 + Math.random() * 9000);
+            document.getElementById('v-pin').value = pin;
+        }
+
+        async function updateVoterPin() {
+            const pin = document.getElementById('v-pin').value;
+            const res = await fetch('/api/admin/update-pin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: selectedVoterId, pin })
+            });
+            if (res.ok) {
+                alert("PIN UPDATED SUCCESSFULLY. Shares this with the student for remote voting.");
+                searchVoter(); // Refresh details
             }
         }
 

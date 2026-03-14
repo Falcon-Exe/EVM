@@ -3,14 +3,18 @@ const bodyParser = require('body-parser');
 const session = require('express-session');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const backupManager = require('./backup-manager');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const dbPath = path.join(__dirname, 'database.db');
 const db = new sqlite3.Database(dbPath);
 
-const DEBUG = process.env.DEBUG === 'true';
+const DEBUG = true; // Forced ON for convenience
 console.log(`[SYS] Debug Mode: ${DEBUG ? 'ACTIVE' : 'OFF'}`);
+
+// Start Automatic Backups
+backupManager.start();
 
 // Simple Rate Limiter for Logins
 const loginAttempts = {};
